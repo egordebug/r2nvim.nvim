@@ -20,7 +20,7 @@ vim.api.nvim_create_user_command('R2', function(opts)
             print("Error: Path required for Open")
         end
     elseif cmd == "Decompile" then
-        r2.decompile()
+        r2.decompile(args[2])
     elseif cmd == "GOTO" then
         r2.goto_addr(args[2])
     elseif cmd == "View-Set" then

@@ -36,7 +36,6 @@ local function get_lines_from_r2(r2_cmds, on_done)
         on_stderr = function(_, data)
             for _, line in ipairs(data) do
                 if line ~= "" and line:match("^[IW]") then 
-                    -- Выводим INFO и WARN логи радара в статус-бар
                     vim.api.nvim_echo({{ "[R2]: " .. line, "WarningMsg" }}, false, {})
                 end
             end
@@ -48,7 +47,14 @@ local function get_lines_from_r2(r2_cmds, on_done)
 end
 
 function M.decompile(target)
-    target = target or "main"
+    if not target or target == "" then
+        target = vim.fn.expand("<cword>")
+    end
+    if not target or target == "" then
+        target = "main"
+    end
+    target = target:gsub("%%", "") 
+
     local r2_cmds = string.format("e bin.relocs.apply=true; aa; s %s; pdi", target)
     
     vim.notify("R2: Analyzing " .. target .. "...", vim.log.levels.INFO)
