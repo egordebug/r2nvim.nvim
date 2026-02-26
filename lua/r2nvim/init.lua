@@ -1,8 +1,7 @@
-local formatter = require('r2nvim.formatter')
 local M = {}
 
 M.config = {
-    view = { "Addr", "Signature", "Asm", "Pseudo-C" },
+    view = { "Addr", "Asm", "Pseudo-C" },
     bin = "radare2",
 }
 
@@ -13,58 +12,96 @@ function M.is_installed()
     if vim.fn.executable(bin) == 1 then
         return true
     end
-    local msg = string.format("Error: '%s' not found in PATH. Please install '%s'.", bin, bin)
+    local msg = string.format("Error: '%s' not found. Please install radare2.", bin)
     vim.notify(msg, vim.log.levels.ERROR, { title = "r2nvim" })
     return false
 end
 
-
-local function get_lines_from_r2(r2_cmds)
+local function get_lines_from_r2(r2_cmds, on_done)
     local file = vim.fn.expand('%:p')
-    if file == "" then return {} end
+    if file == "" then 
+        vim.notify("No file open", vim.log.levels.WARN)
+        return 
+    end
+    
     local cmd = string.format('%s -q -c "%s" "%s"', M.config.bin, r2_cmds, file)
-    return vim.fn.systemlist(cmd)
+    local lines = {}
+    
+    vim.fn.jobstart(cmd, {
+        on_stdout = function(_, data)
+            for _, line in ipairs(data) do
+                if line ~= "" then table.insert(lines, line) end
+            end
+        end,
+        on_stderr = function(_, data)
+            for _, line in ipairs(data) do
+                if line ~= "" and line:match("^[IW]") then 
+                    -- Выводим INFO и WARN логи радара в статус-бар
+                    vim.api.nvim_echo({{ "[R2]: " .. line, "WarningMsg" }}, false, {})
+                end
+            end
+        end,
+        on_exit = function()
+            on_done(lines)
+        end
+    })
 end
 
 function M.decompile(target)
     target = target or "main"
-    local r2_cmds = string.format("aa; s %s; pdi", target)
-    local output = get_lines_from_r2(r2_cmds)
+    local r2_cmds = string.format("e bin.relocs.apply=true; aa; s %s; pdi", target)
     
-    local table_data = {}
-    for _, line in ipairs(output) do
-        local addr, sig, instr = line:match("(0x%x+)%s+([%x%s]+)%s+(.*)")
-        if addr then
-            local row_parts = {}
-            for _, v in ipairs(M.config.view) do
-                if v == "Addr" then table.insert(row_parts, addr)
-                elseif v == "Signature" then table.insert(row_parts, sig:sub(1,10))
-                elseif v == "Asm" then table.insert(row_parts, instr)
-                elseif v == "Pseudo-C" then table.insert(row_parts, "/* logic */")
-                end
-            end
-            table.insert(table_data, table.concat(row_parts, "|"))
-        end
-    end
+    vim.notify("R2: Analyzing " .. target .. "...", vim.log.levels.INFO)
 
-    local final_lines = formatter.format_table(table_data)
-    
-    if not M.buf or not vim.api.nvim_buf_is_valid(M.buf) then
-        M.buf = vim.api.nvim_create_buf(false, true)
-        vim.api.nvim_buf_set_option(M.buf, 'ft', 'asm')
-    end
-    
-    vim.api.nvim_buf_set_lines(M.buf, 0, -1, false, final_lines)
-    
-    if vim.fn.bufwinid(M.buf) == -1 then
-        vim.cmd('tabnew | b ' .. M.buf)
-    end
+    get_lines_from_r2(r2_cmds, function(output)
+        local raw_table = {}
+        
+        table.insert(raw_table, table.concat(M.config.view, "|"))
+        
+        local sep = {}
+        for _ in ipairs(M.config.view) do table.insert(sep, "---") end
+        table.insert(raw_table, table.concat(sep, "|"))
+
+        for _, line in ipairs(output) do
+            local addr, rest = line:match("(0x%x+)%s+(.*)")
+            if addr then
+                local row = {}
+                for _, v in ipairs(M.config.view) do
+                    if v == "Addr" then table.insert(row, addr)
+                    elseif v == "Asm" then table.insert(row, rest:gsub("%s+", " "))
+                    else table.insert(row, " ") end
+                end
+                table.insert(raw_table, table.concat(row, "|"))
+            end
+        end
+
+        vim.schedule(function()
+            if #raw_table <= 2 then
+                vim.notify("R2: No code found at " .. target, vim.log.levels.ERROR)
+                return
+            end
+
+            local input_str = table.concat(raw_table, "\n")
+            local final_lines = vim.fn.systemlist("echo '" .. input_str .. "' | column -t -s '|' -o ' | '")
+
+            if not M.buf or not vim.api.nvim_buf_is_valid(M.buf) then
+                M.buf = vim.api.nvim_create_buf(false, true)
+                vim.api.nvim_buf_set_option(M.buf, 'ft', 'asm')
+                vim.api.nvim_buf_set_name(M.buf, "R2_Decompile")
+            end
+
+            vim.api.nvim_buf_set_lines(M.buf, 0, -1, false, final_lines)
+            
+            if vim.fn.bufwinid(M.buf) == -1 then
+                vim.cmd('vsplit | b ' .. M.buf)
+            end
+        end)
+    end)
 end
 
 function M.goto_addr(target)
     target = target or vim.fn.expand("<cword>")
-    if target == "" then return end
-    M.decompile(target)
+    if target ~= "" then M.decompile(target) end
 end
 
 function M.open_project(name)
