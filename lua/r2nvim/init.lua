@@ -55,7 +55,7 @@ function M.decompile(target)
     end
     target = target:gsub("%%", "") 
 
-    local r2_cmds = string.format("e bin.relocs.apply=true; aa; s %s; pdi", target)
+    local r2_cmds = string.format("e bin.cache=true; e bin.relocs.apply=true; s %s; af; pdi", target)
     
     vim.notify("R2: Analyzing " .. target .. "...", vim.log.levels.INFO)
 
