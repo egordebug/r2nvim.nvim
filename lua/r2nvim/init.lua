@@ -33,7 +33,7 @@ function M.decompile(target)
     if not target or target == "" then target = vim.fn.expand("<cword>") end
     if not target or target == "" then target = "main" end
     target = target:gsub("%%", ""):gsub("%s+", "")
-    local r2_cmds = string.format("e bin.cache=true; s %s; pdi 100", target)
+    local r2_cmds = string.format("on; s %s; pdi 100", target)
     
     vim.notify("R2: Quick jump to " .. target, vim.log.levels.INFO)
 
