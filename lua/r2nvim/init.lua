@@ -88,8 +88,13 @@ function M.decompile(target)
             end
 
             local input_str = table.concat(raw_table, "\n")
-            local final_lines = vim.fn.systemlist("echo '" .. input_str .. "' | column -t -s '|' -o ' | '")
-
+            local final_lines = vim.fn.systemlist("column -t -s '|' -o ' | '", input_str)
+            
+            if vim.v.shell_error ~= 0 then
+                vim.notify("Column error: check util-linux", vim.log.levels.ERROR)
+                return
+            end
+            
             if not M.buf or not vim.api.nvim_buf_is_valid(M.buf) then
                 M.buf = vim.api.nvim_create_buf(false, true)
                 vim.api.nvim_buf_set_option(M.buf, 'ft', 'asm')

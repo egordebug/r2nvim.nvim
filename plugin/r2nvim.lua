@@ -1,11 +1,13 @@
 local r2 = require('r2nvim')
 
 vim.api.nvim_create_user_command('R2', function(opts)
+    local r2 = require("r2nvim")
+    
     if not r2.is_installed() then
         return
     end
 
-    local args = vim.split(opts.args, " ")
+    local args = opts.fargs
     local cmd = args[1]
 
     if not cmd or cmd == "" then
@@ -20,7 +22,8 @@ vim.api.nvim_create_user_command('R2', function(opts)
             print("Error: Path required for Open")
         end
     elseif cmd == "Decompile" then
-        r2.decompile(args[2])
+        local target = args[2]
+        r2.decompile(target)
     elseif cmd == "GOTO" then
         r2.goto_addr(args[2])
     elseif cmd == "View-Set" then
